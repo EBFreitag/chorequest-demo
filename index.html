@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>ChoreQuest Demo</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎮</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; padding: 0; background: #0f0c29; font-family: 'Nunito', sans-serif; color: #fff; }
+@keyframes pulse { 0%,100% { transform:scale(1); } 50% { transform:scale(1.05); } }
+@keyframes confettiFall { 0% { transform: translateY(0) rotate(0deg); opacity:1; } 100% { transform: translateY(100vh) rotate(720deg); opacity:0; } }
+@keyframes fadeInUp { 0% { opacity:0; transform: translateY(30px); } 100% { opacity:1; transform: translateY(0); } }
+@keyframes popBounce { 0% { transform: scale(0); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+@keyframes shimmer { 0%,100% { opacity: 0.7; } 50% { opacity: 1; } }
+@keyframes glow { 0%,100% { box-shadow: 0 0 20px rgba(255,215,0,0.3); } 50% { box-shadow: 0 0 40px rgba(255,215,0,0.6); } }
+@keyframes bannerShimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+button { font-family: 'Nunito', sans-serif; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef } = React;
+
+const BASELINE = 150;
+const STRETCH = 180;
+const IPAD_MINUTES = 45;
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const AVATAR_OPTIONS = ["🦁", "🐉", "🦊", "🐺", "🦄", "🐸", "🦅", "🐙", "🦖", "🐯", "🐻", "🦈", "🐲", "🦇", "🐵", "🦜", "🐼", "🦀", "🐝", "🦋"];
+
+function getDayOfWeek() { return new Date().getDay(); }
+function getTodayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function getPrevDayStr() {
+  const d = new Date(); d.setDate(d.getDate()-1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+const getDemoState = () => ({
+  profiles: {
+    owen: { name: "Owen", avatar: "🦁", color: "#FF6B35", points: 65, lifetimePoints: 485, wheelPrize: "Minecoins", baselineEarned: false, hasSpun: true },
+    liam: { name: "Liam", avatar: "🐉", color: "#4ECDC4", points: 40, lifetimePoints: 320, wheelPrize: "Game night decider", baselineEarned: false, hasSpun: true },
+  },
+  standingChores: [
+    { id: "dinner", name: "Eat dinner well", points: 5, frequency: "weekday", icon: "🍽️" },
+    { id: "lunch-weekend", name: "Eat lunch well", points: 5, frequency: "weekend", icon: "🥪" },
+    { id: "dinner-weekend", name: "Eat dinner well", points: 5, frequency: "weekend", icon: "🍽️" },
+    { id: "shoes", name: "Shoes & backpacks away", points: 5, frequency: "daily", icon: "👟" },
+    { id: "room-tue", name: "Clean room (Tuesday)", points: 15, frequency: "tuesday", icon: "🧹" },
+    { id: "room-sat", name: "Clean room (Saturday)", points: 15, frequency: "saturday", icon: "🧹" },
+    { id: "doglong", name: "Walk the dog (long)", points: 10, frequency: "as-assigned", icon: "🐕" },
+    { id: "dogshort", name: "Walk the dog (short)", points: 5, frequency: "as-assigned", icon: "🐶" },
+  ],
+  rotatingChores: { owen: [{ id: "rot-1", name: "Wipe kitchen table", points: 5, frequency: "weekly", icon: "⭐" }], liam: [{ id: "rot-2", name: "Sort recycling", points: 10, frequency: "weekly", icon: "⭐" }] },
+  choreLog: {
+    owen: [
+      { choreId: "dinner", date: getTodayStr(), done: true, verified: true, points: 5 },
+      { choreId: "shoes", date: getTodayStr(), done: true, verified: true, points: 5 },
+      { choreId: "doglong", date: getTodayStr(), done: true, verified: false, points: 10 },
+    ],
+    liam: [
+      { choreId: "shoes", date: getTodayStr(), done: true, verified: true, points: 5 },
+      { choreId: "dogshort", date: getTodayStr(), done: true, verified: false, points: 5 },
+    ],
+  },
+  pointAdjustments: {
+    owen: [
+      { amount: 15, reason: "Helped Liam with homework without being asked", date: getTodayStr() },
+      { amount: -5, reason: "Argued about screen time", date: getPrevDayStr() },
+    ],
+    liam: [{ amount: 10, reason: "Fed Tivoli all week without reminders", date: getPrevDayStr() }],
+  },
+  prizeWheelItems: ["Minecoins", "Extra iPad time", "Skip dog walk next week", "Double piggy back ride day", "Game night decider"],
+});
+
+const Confetti = ({ active }) => {
+  if (!active) return null;
+  const pieces = Array.from({ length: 40 }, (_, i) => ({
+    id: i, left: Math.random()*100, delay: Math.random()*0.6, duration: 1.2+Math.random()*1.5, size: 6+Math.random()*10,
+    color: ["#FF6B35","#4ECDC4","#FFD700","#FF69B4","#7B68EE","#00CED1"][i%6], rotation: Math.random()*360,
+  }));
+  return React.createElement("div", { style: { position:"fixed", inset:0, pointerEvents:"none", zIndex:9999 } },
+    pieces.map(p => React.createElement("div", { key: p.id, style: { position:"absolute", left:`${p.left}%`, top:"-10px", width:p.size, height:p.size, backgroundColor:p.color, borderRadius: Math.random()>0.5?"50%":"2px", animation:`confettiFall ${p.duration}s ${p.delay}s ease-in forwards`, transform:`rotate(${p.rotation}deg)` }}))
+  );
+};
+
+const AvatarPicker = ({ current, onSelect, color }) => (
+  <div style={{ marginBottom: 20 }}>
+    <div style={{ fontSize: 13, fontWeight: 700, color: "#aaa", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, textAlign: "center" }}>Pick your avatar this week</div>
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center", maxWidth: 320, margin: "0 auto" }}>
+      {AVATAR_OPTIONS.map(a => (
+        <button key={a} onClick={() => onSelect(a)} style={{ width: 48, height: 48, borderRadius: 14, border: current===a ? `3px solid ${color}` : "2px solid #333", background: current===a ? `${color}22` : "#1a1a2e", fontSize: 28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", transform: current===a ? "scale(1.1)" : "scale(1)" }}>{a}</button>
+      ))}
+    </div>
+  </div>
+);
+
+const PrizeWheel = ({ items, onComplete, kidColor }) => {
+  const canvasRef = useRef(null);
+  const [rotation, setRotation] = useState(0);
+  const [phase, setPhase] = useState("ready");
+  const [result, setResult] = useState(null);
+  const targetIdxRef = useRef(0);
+  const colors = ["#FF6B35","#4ECDC4","#FFD700","#FF69B4","#7B68EE"];
+  const arcDeg = 360/items.length;
+  const arcRad = (2*Math.PI)/items.length;
+
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return;
+    const ctx = canvas.getContext("2d"); const size = canvas.width; const center = size/2; const radius = center-10;
+    ctx.clearRect(0,0,size,size);
+    ctx.beginPath(); ctx.arc(center,center,radius+6,0,2*Math.PI); ctx.strokeStyle="rgba(255,215,0,0.3)"; ctx.lineWidth=4; ctx.stroke();
+    ctx.beginPath(); ctx.arc(center+3,center+3,radius,0,2*Math.PI); ctx.fillStyle="rgba(0,0,0,0.2)"; ctx.fill();
+    const rotRad = (rotation*Math.PI)/180;
+    items.forEach((item,i) => {
+      const angle = i*arcRad+rotRad;
+      ctx.beginPath(); ctx.moveTo(center,center); ctx.arc(center,center,radius,angle,angle+arcRad); ctx.closePath();
+      ctx.fillStyle=colors[i%colors.length]; ctx.fill(); ctx.strokeStyle="rgba(255,255,255,0.8)"; ctx.lineWidth=3; ctx.stroke();
+      ctx.save(); ctx.translate(center,center); ctx.rotate(angle+arcRad/2);
+      ctx.fillStyle="#fff"; ctx.font="bold 13px 'Nunito', sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText(item.length>16?item.substring(0,14)+"…":item, radius*0.58, 0); ctx.restore();
+    });
+    ctx.beginPath(); ctx.arc(center,center,26,0,2*Math.PI); ctx.fillStyle="#1a1a2e"; ctx.fill();
+    ctx.strokeStyle="#FFD700"; ctx.lineWidth=3; ctx.stroke();
+    ctx.fillStyle="#FFD700"; ctx.font="18px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("⭐",center,center);
+  }, [items, rotation]);
+
+  const spin = () => {
+    setPhase("spinning"); setResult(null);
+    const targetIdx = Math.floor(Math.random()*items.length); targetIdxRef.current = targetIdx;
+    const segCenter = targetIdx*arcDeg+arcDeg/2;
+    const neededRot = ((270-segCenter)%360+360)%360;
+    const totalRotation = 2160+neededRot;
+    let start = null; const duration = 5000;
+    const animate = (ts) => {
+      if (!start) start=ts; const progress = Math.min((ts-start)/duration,1);
+      setRotation((1-Math.pow(1-progress,5))*totalRotation);
+      if (progress<1) requestAnimationFrame(animate);
+      else { setResult(items[targetIdxRef.current]); setPhase("landed"); }
+    };
+    requestAnimationFrame(animate);
+  };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:20, animation:"fadeInUp 0.6s ease-out" }}>
+      <div style={{ position:"relative" }}>
+        <div style={{ position:"absolute", top:-14, left:"50%", transform:"translateX(-50%)", width:0, height:0, borderLeft:"16px solid transparent", borderRight:"16px solid transparent", borderTop:"28px solid #FFD700", zIndex:10, filter:"drop-shadow(0 3px 6px rgba(0,0,0,0.4))" }} />
+        <canvas ref={canvasRef} width={320} height={320} style={{ borderRadius:"50%", boxShadow:"0 8px 40px rgba(255,215,0,0.3)", animation: phase==="ready"?"glow 2s infinite":"none" }} />
+      </div>
+      {phase==="ready" && <button onClick={spin} style={{ background:"linear-gradient(135deg, #FFD700, #FF6B35)", border:"none", borderRadius:20, padding:"20px 56px", fontSize:26, fontWeight:900, color:"#fff", cursor:"pointer", boxShadow:"0 6px 24px rgba(255,107,53,0.5)", animation:"glow 2s infinite" }}>🎰 SPIN!</button>}
+      {phase==="spinning" && <div style={{ fontSize:22, fontWeight:800, color:"#FFD700", animation:"shimmer 0.5s infinite" }}>Spinning...</div>}
+      {phase==="landed" && result && (
+        <div style={{ textAlign:"center", animation:"popBounce 0.5s cubic-bezier(0.34,1.56,0.64,1)" }}>
+          <div style={{ background:`linear-gradient(135deg, ${kidColor}, #FFD700)`, borderRadius:20, padding:"24px 40px", boxShadow:"0 8px 32px rgba(255,215,0,0.3)" }}>
+            <div style={{ fontSize:15, color:"rgba(255,255,255,0.85)", fontWeight:700, marginBottom:4 }}>This week you're working for:</div>
+            <div style={{ fontSize:32, fontWeight:900, color:"#fff" }}>🏆 {result}</div>
+          </div>
+          <button onClick={() => onComplete(result)} style={{ marginTop:20, background:"rgba(255,255,255,0.12)", border:"2px solid rgba(255,255,255,0.25)", borderRadius:16, padding:"14px 36px", color:"#fff", fontSize:18, fontWeight:800, cursor:"pointer" }}>Let's go! →</button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const PrizeBanner = ({ prize, points, color, earned }) => {
+  const pct = Math.min((points/STRETCH)*100,100);
+  return (
+    <div style={{ background: earned?`linear-gradient(135deg, ${color}, #FFD700)`:`linear-gradient(135deg, ${color}22, rgba(255,215,0,0.08))`, border: earned?"none":`2px solid ${color}44`, borderRadius:20, padding: earned?"20px 24px":"16px 20px", marginBottom:20, position:"relative", overflow:"hidden" }}>
+      {earned && <div style={{ position:"absolute", inset:0, background:"linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent)", animation:"bannerShimmer 2s infinite" }} />}
+      <div style={{ position:"relative", zIndex:1 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:700, textTransform:"uppercase", letterSpacing:1, color: earned?"rgba(255,255,255,0.85)":"#999", marginBottom:2 }}>{earned?"🎉 Prize Unlocked!":"🎯 Working toward"}</div>
+            <div style={{ fontSize: earned?26:22, fontWeight:900, color: earned?"#fff":"#FFD700" }}>🏆 {prize}</div>
+          </div>
+          <div style={{ textAlign:"right", fontSize:13, fontWeight:700, color: earned?"rgba(255,255,255,0.9)":"#888" }}>{earned?"EARNED!":`${STRETCH-points} pts to go`}</div>
+        </div>
+        {!earned && <div style={{ marginTop:10, height:8, background:"rgba(255,255,255,0.08)", borderRadius:4, overflow:"hidden" }}><div style={{ height:"100%", borderRadius:4, width:`${pct}%`, background:`linear-gradient(90deg, ${color}, #FFD700)`, transition:"width 0.6s" }} /></div>}
+      </div>
+    </div>
+  );
+};
+
+const ProgressBar = ({ points, profileColor }) => {
+  const stretchPct = Math.min((points/STRETCH)*100,100);
+  const baselineMarkerPct = (BASELINE/STRETCH)*100;
+  return (
+    <div style={{ width:"100%" }}>
+      <div style={{ position:"relative", height:24, background:"#1a1a2e", borderRadius:12, overflow:"hidden", border:"1px solid #2a2a4a" }}>
+        <div style={{ position:"absolute", height:"100%", borderRadius:12, top:0, left:0, width:`${stretchPct}%`, background: points>=STRETCH?"linear-gradient(90deg, #FFD700, #FF6B35)":points>=BASELINE?`linear-gradient(90deg, ${profileColor}, #4ECDC4)`:`linear-gradient(90deg, ${profileColor}99, ${profileColor})`, transition:"width 0.6s" }} />
+        <div style={{ position:"absolute", left:`${baselineMarkerPct}%`, top:0, bottom:0, width:2, background:"rgba(255,255,255,0.4)", zIndex:2 }} />
+      </div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginTop:8 }}>
+        <div style={{ fontSize:20, fontWeight:900, color:profileColor }}>{points}<span style={{ fontSize:13, color:"#888", fontWeight:600 }}> pts</span></div>
+        <div style={{ display:"flex", gap:16, fontSize:12 }}>
+          <div style={{ textAlign:"center", padding:"4px 10px", borderRadius:8, background: points>=BASELINE?"rgba(78,205,196,0.15)":"rgba(255,255,255,0.04)" }}>
+            <div style={{ fontWeight:800, color: points>=BASELINE?"#4ECDC4":"#666" }}>{points>=BASELINE?"✅":"🔒"} {BASELINE}</div>
+            <div style={{ color:"#777", fontSize:11 }}>iPad time</div>
+          </div>
+          <div style={{ textAlign:"center", padding:"4px 10px", borderRadius:8, background: points>=STRETCH?"rgba(255,215,0,0.15)":"rgba(255,255,255,0.04)" }}>
+            <div style={{ fontWeight:800, color: points>=STRETCH?"#FFD700":"#666" }}>{points>=STRETCH?"🏆":"🔒"} {STRETCH}</div>
+            <div style={{ color:"#777", fontSize:11 }}>Prize!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const LifetimeBadge = ({ lifetimePoints, color }) => (
+  <div style={{ display:"flex", alignItems:"center", gap:6, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"5px 12px" }}>
+    <span style={{ fontSize:14 }}>🏅</span>
+    <span style={{ fontSize:13, fontWeight:700, color }}>{lifetimePoints}</span>
+    <span style={{ fontSize:11, color:"#777" }}>all-time</span>
+  </div>
+);
+
+const ChoreCard = ({ chore, completions, onCheckOff, isParent, onVerify }) => {
+  const today = getTodayStr();
+  const todayCompletion = completions.find(c => c.date===today && c.choreId===chore.id);
+  const dayNum = getDayOfWeek(); const isWeekend = dayNum===0||dayNum===6;
+  let isDueToday = false;
+  if (chore.frequency==="daily") isDueToday=true;
+  else if (chore.frequency==="weekday") isDueToday=!isWeekend;
+  else if (chore.frequency==="weekend") isDueToday=isWeekend;
+  else if (chore.frequency==="as-assigned"||chore.frequency==="weekly"||chore.frequency==="one-off") isDueToday=true;
+  else if (chore.frequency==="tuesday") isDueToday=dayNum===2;
+  else if (chore.frequency==="saturday") isDueToday=dayNum===6;
+  if (!isDueToday) return null;
+  const status = todayCompletion?.verified?"verified":todayCompletion?.done?"pending":"todo";
+  const bg = {todo:"#1e1e32",pending:"#2d2600",verified:"#0d2e1f"};
+  const bd = {todo:"#2e2e4a",pending:"#FFD700",verified:"#4ECDC4"};
+  const freqLabel = {daily:"Every day",weekday:"Mon–Fri",weekend:"Sat & Sun",tuesday:"Tuesday",saturday:"Saturday","as-assigned":"As assigned",weekly:"This week"};
+  return (
+    <div style={{ background:bg[status], border:`2px solid ${bd[status]}`, borderRadius:16, padding:"14px 16px", display:"flex", alignItems:"center", gap:12, transition:"all 0.3s", opacity:status==="verified"?0.7:1 }}>
+      <div style={{ fontSize:30, flexShrink:0 }}>{chore.icon}</div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontWeight:800, fontSize:15, textDecoration:status==="verified"?"line-through":"none", color:status==="verified"?"#4ECDC4":"#fff" }}>{chore.name}</div>
+        <div style={{ display:"flex", gap:6, marginTop:3 }}>
+          <span style={{ background:"rgba(255,215,0,0.15)", borderRadius:8, padding:"1px 8px", fontSize:12, fontWeight:700, color:"#FFD700" }}>+{chore.points}</span>
+          <span style={{ background:"rgba(255,255,255,0.05)", borderRadius:8, padding:"1px 8px", fontSize:12, color:"#888" }}>{freqLabel[chore.frequency]||chore.frequency}</span>
+        </div>
+      </div>
+      {status==="todo"&&!isParent && <button onClick={()=>onCheckOff(chore.id)} style={{ background:"linear-gradient(135deg, #4ECDC4, #44A08D)", border:"none", borderRadius:12, padding:"10px 16px", color:"#fff", fontWeight:800, fontSize:14, cursor:"pointer" }}>Done! ✓</button>}
+      {status==="pending"&&!isParent && <div style={{ background:"rgba(255,215,0,0.15)", borderRadius:12, padding:"10px 12px", fontSize:13, fontWeight:700, color:"#FFD700" }}>⏳ Waiting</div>}
+      {status==="pending"&&isParent && (
+        <div style={{ display:"flex", gap:6 }}>
+          <button onClick={()=>onVerify(chore.id,today,true)} style={{ background:"#4ECDC4", border:"none", borderRadius:10, padding:"8px 14px", color:"#fff", fontWeight:800, cursor:"pointer" }}>✓</button>
+          <button onClick={()=>onVerify(chore.id,today,false)} style={{ background:"#FF6B6B", border:"none", borderRadius:10, padding:"8px 14px", color:"#fff", fontWeight:800, cursor:"pointer" }}>✗</button>
+        </div>
+      )}
+      {status==="verified" && <div style={{ fontSize:26 }}>✅</div>}
+    </div>
+  );
+};
+
+function AdjustModal({ kidName, onAdjust, onClose }) {
+  const [amount, setAmount] = useState("");
+  const [reason, setReason] = useState("");
+  const [isBonus, setIsBonus] = useState(true);
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
+      <div style={{ background:"#1e1e32", borderRadius:24, padding:32, width:340 }}>
+        <h3 style={{ color:"#fff", margin:"0 0 20px" }}>Adjust Points — {kidName}</h3>
+        <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+          <button onClick={()=>setIsBonus(true)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", background:isBonus?"#4ECDC4":"#2a2a3e", color:"#fff", fontWeight:800, cursor:"pointer" }}>+ Bonus</button>
+          <button onClick={()=>setIsBonus(false)} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", background:!isBonus?"#FF6B6B":"#2a2a3e", color:"#fff", fontWeight:800, cursor:"pointer" }}>− Deduct</button>
+        </div>
+        <input value={amount} onChange={e=>setAmount(e.target.value.replace(/\D/g,""))} placeholder="Points" type="number" style={{ width:"100%", padding:"12px 16px", borderRadius:12, border:"2px solid #444", background:"#2a2a3e", color:"#fff", fontSize:20, marginBottom:12, textAlign:"center", boxSizing:"border-box" }} />
+        <input value={reason} onChange={e=>setReason(e.target.value)} placeholder="Reason (optional)" style={{ width:"100%", padding:"12px 16px", borderRadius:12, border:"2px solid #444", background:"#2a2a3e", color:"#fff", fontSize:14, marginBottom:20, boxSizing:"border-box" }} />
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:12, border:"1px solid #444", background:"none", color:"#888", cursor:"pointer", fontWeight:700 }}>Cancel</button>
+          <button onClick={()=>amount&&onAdjust(isBonus?parseInt(amount):-parseInt(amount),reason)} style={{ flex:1, padding:"12px", borderRadius:12, border:"none", background:isBonus?"#4ECDC4":"#FF6B6B", color:"#fff", cursor:"pointer", fontWeight:800 }}>{isBonus?"Award":"Deduct"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AddChoreModal({ kidName, onAdd, onClose }) {
+  const [name, setName] = useState("");
+  const [points, setPoints] = useState("10");
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
+      <div style={{ background:"#1e1e32", borderRadius:24, padding:32, width:340 }}>
+        <h3 style={{ color:"#fff", margin:"0 0 20px" }}>Add Chore for {kidName}</h3>
+        <input value={name} onChange={e=>setName(e.target.value)} placeholder="Chore name..." style={{ width:"100%", padding:"12px 16px", borderRadius:12, border:"2px solid #444", background:"#2a2a3e", color:"#fff", fontSize:16, marginBottom:12, boxSizing:"border-box" }} />
+        <div style={{ display:"flex", gap:8, marginBottom:20 }}>
+          {[5,10,15].map(p=>(<button key={p} onClick={()=>setPoints(String(p))} style={{ flex:1, padding:"10px", borderRadius:10, border:"none", background:points===String(p)?"#4ECDC4":"#2a2a3e", color:"#fff", fontWeight:800, cursor:"pointer", fontSize:16 }}>{p} pts</button>))}
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"12px", borderRadius:12, border:"1px solid #444", background:"none", color:"#888", cursor:"pointer", fontWeight:700 }}>Cancel</button>
+          <button onClick={()=>name&&onAdd(name,points)} style={{ flex:1, padding:"12px", borderRadius:12, border:"none", background:"#4ECDC4", color:"#fff", cursor:"pointer", fontWeight:800 }}>Add</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [data, setData] = useState(()=>getDemoState());
+  const [screen, setScreen] = useState("home");
+  const [activeKid, setActiveKid] = useState(null);
+  const [confetti, setConfetti] = useState(false);
+  const [pendingAvatar, setPendingAvatar] = useState(null);
+  const [showAdjust, setShowAdjust] = useState(false);
+  const [adjustKid, setAdjustKid] = useState(null);
+  const [showAddChore, setShowAddChore] = useState(false);
+
+  const calcPoints = useCallback((kidId) => {
+    return (data.choreLog[kidId]||[]).filter(c=>c.verified).reduce((s,c)=>s+c.points,0)
+      +(data.pointAdjustments[kidId]||[]).reduce((s,a)=>s+a.amount,0);
+  }, [data]);
+
+  const checkOffChore = (kidId, choreId) => {
+    const allChores = [...data.standingChores,...(data.rotatingChores[kidId]||[])];
+    const chore = allChores.find(c=>c.id===choreId); if (!chore) return;
+    setData({...data, choreLog:{...data.choreLog,[kidId]:[...data.choreLog[kidId],{choreId,date:getTodayStr(),done:true,verified:false,points:chore.points}]}});
+  };
+
+  const verifyChore = (kidId, choreId, date, approved) => {
+    const nd = {...data, choreLog:{...data.choreLog}};
+    nd.choreLog[kidId] = data.choreLog[kidId].map(c=>c.choreId===choreId&&c.date===date?(approved?{...c,verified:true}:null):c).filter(Boolean);
+    const pts = nd.choreLog[kidId].filter(c=>c.verified).reduce((s,c)=>s+c.points,0)+(nd.pointAdjustments[kidId]||[]).reduce((s,a)=>s+a.amount,0);
+    nd.profiles = {...data.profiles,[kidId]:{...data.profiles[kidId],points:pts}};
+    if (pts>=BASELINE&&!data.profiles[kidId].baselineEarned) { nd.profiles[kidId].baselineEarned=true; setConfetti(true); setTimeout(()=>setConfetti(false),3000); }
+    setData(nd);
+  };
+
+  const adjustPoints = (kidId, amount, reason) => {
+    const nd = {...data, pointAdjustments:{...data.pointAdjustments,[kidId]:[...data.pointAdjustments[kidId],{amount,reason,date:getTodayStr()}]}};
+    const pts = Math.max(0,nd.choreLog[kidId].filter(c=>c.verified).reduce((s,c)=>s+c.points,0)+nd.pointAdjustments[kidId].reduce((s,a)=>s+a.amount,0));
+    nd.profiles = {...data.profiles,[kidId]:{...data.profiles[kidId],points:pts,baselineEarned:pts>=BASELINE}};
+    setData(nd);
+  };
+
+  const addRotatingChore = (kidId, name, points) => {
+    setData({...data, rotatingChores:{...data.rotatingChores,[kidId]:[...data.rotatingChores[kidId],{id:`rot-${Date.now()}`,name,points:parseInt(points),frequency:"weekly",icon:"⭐"}]}});
+  };
+
+  const onWheelComplete = (kidId, prize) => {
+    const avatar = pendingAvatar||data.profiles[kidId].avatar;
+    setData({...data, profiles:{...data.profiles,[kidId]:{...data.profiles[kidId],wheelPrize:prize,hasSpun:true,avatar}}});
+    setPendingAvatar(null); setConfetti(true);
+    setTimeout(()=>{setConfetti(false);setScreen("kid-dashboard");},2500);
+  };
+
+  const resetDemo = () => { setData(getDemoState()); setScreen("home"); setActiveKid(null); };
+
+  // DEMO BANNER
+  const demoBanner = (
+    <div style={{ position:"fixed", top:0, left:0, right:0, background:"linear-gradient(90deg, #FF6B35, #FFD700)", padding:"6px 16px", textAlign:"center", fontSize:13, fontWeight:800, color:"#1a1a2e", zIndex:100, display:"flex", justifyContent:"center", alignItems:"center", gap:12 }}>
+      <span>🎮 DEMO MODE — tap around freely! Nothing saves.</span>
+      <button onClick={resetDemo} style={{ background:"rgba(0,0,0,0.2)", border:"none", borderRadius:8, padding:"3px 12px", color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer" }}>Reset</button>
+    </div>
+  );
+
+  const shell = (children) => (
+    <div style={{ minHeight:"100vh", background:"linear-gradient(135deg, #0f0c29, #302b63, #24243e)", padding:"20px 20px 100px" }}>
+      <Confetti active={confetti} />
+      {demoBanner}
+      <div style={{ paddingTop:28 }}>{children}</div>
+    </div>
+  );
+
+  // HOME
+  if (screen==="home") {
+    return shell(
+      <div style={{ maxWidth:600, margin:"0 auto", textAlign:"center", paddingTop:20 }}>
+        <div style={{ marginBottom:40 }}>
+          <div style={{ fontSize:48, marginBottom:8 }}>🏠</div>
+          <h1 style={{ margin:0, fontSize:48, fontWeight:900, background:"linear-gradient(135deg, #FFD700, #FF6B35)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", letterSpacing:-1 }}>ChoreQuest</h1>
+          <p style={{ color:"#8888aa", marginTop:4, fontSize:16 }}>Week of {new Date().toLocaleDateString("en-US",{month:"short",day:"numeric"})} · {DAYS[getDayOfWeek()]}</p>
+        </div>
+        <div style={{ display:"flex", gap:20, justifyContent:"center", marginBottom:40 }}>
+          {Object.entries(data.profiles).map(([id,profile]) => {
+            const pts = calcPoints(id); const needsSpin = !profile.hasSpun;
+            return (
+              <button key={id} onClick={()=>{setActiveKid(id);setPendingAvatar(profile.avatar);setScreen(needsSpin?"wheel":"kid-dashboard");}}
+                style={{ background:`linear-gradient(135deg, ${profile.color}22, ${profile.color}11)`, border:`3px solid ${profile.color}66`, borderRadius:24, padding:"24px 28px", cursor:"pointer", transition:"all 0.2s", flex:1, maxWidth:260 }}>
+                <div style={{ fontSize:56, marginBottom:6 }}>{profile.avatar}</div>
+                <div style={{ fontSize:24, fontWeight:900, color:"#fff" }}>{profile.name}</div>
+                <LifetimeBadge lifetimePoints={(profile.lifetimePoints||0)+Math.max(0,pts)} color={profile.color} />
+                {needsSpin ? (
+                  <div style={{ marginTop:12, background:"linear-gradient(135deg, #FFD700, #FF6B35)", borderRadius:14, padding:"10px 16px", fontSize:16, fontWeight:800, color:"#fff", animation:"pulse 1.5s infinite" }}>🎡 Spin Your Wheel!</div>
+                ) : (
+                  <>
+                    {profile.wheelPrize && <div style={{ marginTop:10, background:pts>=STRETCH?"linear-gradient(135deg, #FFD700, #FF6B35)":"rgba(255,215,0,0.12)", border:pts>=STRETCH?"none":"1px solid rgba(255,215,0,0.25)", borderRadius:12, padding:"6px 12px", fontSize:13, fontWeight:700, color:pts>=STRETCH?"#fff":"#FFD700" }}>{pts>=STRETCH?"🎉 ":"🎯 "}{profile.wheelPrize}</div>}
+                    <div style={{ marginTop:12 }}><ProgressBar points={pts} profileColor={profile.color} /></div>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={()=>setScreen("parent-panel")} style={{ background:"rgba(255,255,255,0.06)", border:"2px solid rgba(255,255,255,0.15)", borderRadius:16, padding:"16px 32px", color:"#aaa", fontSize:16, fontWeight:700, cursor:"pointer" }}>🔧 Parent / Babysitter Panel</button>
+      </div>
+    );
+  }
+
+  // WHEEL
+  if (screen==="wheel"&&activeKid) {
+    const profile = data.profiles[activeKid];
+    return shell(
+      <div style={{ maxWidth:500, margin:"0 auto", textAlign:"center", paddingTop:20 }}>
+        <button onClick={()=>{setScreen("home");setActiveKid(null);}} style={{ position:"absolute", top:54, left:24, background:"rgba(255,255,255,0.1)", border:"none", borderRadius:12, padding:"8px 14px", color:"#fff", cursor:"pointer", fontSize:18 }}>←</button>
+        <div style={{ fontSize:60, marginBottom:8 }}>{pendingAvatar||profile.avatar}</div>
+        <h2 style={{ margin:"0 0 4px", fontSize:30, fontWeight:900, color:profile.color }}>{profile.name}</h2>
+        <p style={{ color:"#888", marginBottom:16, fontSize:17 }}>Pick your avatar & spin!</p>
+        <AvatarPicker current={pendingAvatar||profile.avatar} onSelect={setPendingAvatar} color={profile.color} />
+        <PrizeWheel items={data.prizeWheelItems} onComplete={prize=>onWheelComplete(activeKid,prize)} kidColor={profile.color} />
+      </div>
+    );
+  }
+
+  // KID DASHBOARD
+  if (screen==="kid-dashboard"&&activeKid) {
+    const profile = data.profiles[activeKid]; const pts = calcPoints(activeKid);
+    const allChores = [...data.standingChores,...(data.rotatingChores[activeKid]||[])];
+    const log = data.choreLog[activeKid]||[];
+    const totalLifetime = (profile.lifetimePoints||0)+Math.max(0,pts);
+    return shell(
+      <div style={{ maxWidth:500, margin:"0 auto" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
+          <button onClick={()=>{setScreen("home");setActiveKid(null);}} style={{ background:"rgba(255,255,255,0.1)", border:"none", borderRadius:12, padding:"8px 14px", color:"#fff", cursor:"pointer", fontSize:18 }}>←</button>
+          <div style={{ fontSize:38 }}>{profile.avatar}</div>
+          <div style={{ flex:1 }}>
+            <h2 style={{ margin:0, fontSize:26, fontWeight:900, color:profile.color }}>{profile.name}</h2>
+            <p style={{ margin:0, color:"#888", fontSize:13 }}>{DAYS[getDayOfWeek()]}'s Quests</p>
+          </div>
+          <LifetimeBadge lifetimePoints={totalLifetime} color={profile.color} />
+        </div>
+        {profile.wheelPrize && <PrizeBanner prize={profile.wheelPrize} points={pts} color={profile.color} earned={pts>=STRETCH} />}
+        <div style={{ background:"rgba(255,255,255,0.04)", borderRadius:20, padding:20, marginBottom:20 }}><ProgressBar points={pts} profileColor={profile.color} /></div>
+        {pts>=STRETCH&&profile.wheelPrize&&(
+          <div style={{ background:"linear-gradient(135deg, #FFD700, #FF6B35)", borderRadius:16, padding:20, marginBottom:20, textAlign:"center", animation:"pulse 2s infinite" }}>
+            <div style={{ fontSize:28, fontWeight:900, color:"#fff" }}>🎉 You earned your prize!</div>
+            <div style={{ fontSize:20, color:"rgba(255,255,255,0.9)", marginTop:4 }}>{profile.wheelPrize}</div>
+          </div>
+        )}
+        <h3 style={{ fontSize:16, fontWeight:800, marginBottom:10, color:"#aaa", textTransform:"uppercase", letterSpacing:1 }}>Today's Chores</h3>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {allChores.map(chore=>(<ChoreCard key={chore.id} chore={chore} completions={log} onCheckOff={cid=>checkOffChore(activeKid,cid)} isParent={false} onVerify={()=>{}} />))}
+        </div>
+        {(data.pointAdjustments[activeKid]||[]).length>0&&(
+          <div style={{ marginTop:24 }}>
+            <h3 style={{ fontSize:16, fontWeight:800, marginBottom:10, color:"#aaa", textTransform:"uppercase", letterSpacing:1 }}>Bonus & Deductions</h3>
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {[...(data.pointAdjustments[activeKid]||[])].reverse().map((adj,i)=>{
+                const isPositive=adj.amount>0;
+                return (
+                  <div key={i} style={{ background:isPositive?"rgba(78,205,196,0.08)":"rgba(255,107,107,0.08)", border:`1px solid ${isPositive?"rgba(78,205,196,0.25)":"rgba(255,107,107,0.25)"}`, borderRadius:12, padding:"10px 14px", display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{ fontSize:22, width:36, height:36, borderRadius:10, background:isPositive?"rgba(78,205,196,0.15)":"rgba(255,107,107,0.15)", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>{isPositive?"⭐":"⚠️"}</div>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:14, fontWeight:700, color:isPositive?"#4ECDC4":"#FF6B6B" }}>{isPositive?`+${adj.amount} Bonus`:`${adj.amount} Deduction`}</div>
+                      {adj.reason&&<div style={{ fontSize:13, color:"#888", marginTop:2 }}>{adj.reason}</div>}
+                    </div>
+                    <div style={{ fontSize:12, color:"#666" }}>{adj.date===getTodayStr()?"Today":"Yesterday"}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // PARENT PANEL
+  if (screen==="parent-panel") {
+    return shell(
+      <div style={{ maxWidth:600, margin:"0 auto" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
+          <button onClick={()=>setScreen("home")} style={{ background:"rgba(255,255,255,0.1)", border:"none", borderRadius:12, padding:"8px 14px", color:"#fff", cursor:"pointer", fontSize:18 }}>←</button>
+          <h2 style={{ margin:0, fontSize:24, fontWeight:900 }}>🔧 Parent / Babysitter Panel</h2>
+        </div>
+        {Object.entries(data.profiles).map(([kidId,profile])=>{
+          const pts=calcPoints(kidId); const log=data.choreLog[kidId]||[];
+          const allChores=[...data.standingChores,...(data.rotatingChores[kidId]||[])];
+          const pendingChores=log.filter(c=>c.done&&!c.verified);
+          const totalLifetime=(profile.lifetimePoints||0)+Math.max(0,pts);
+          return (
+            <div key={kidId} style={{ background:"rgba(255,255,255,0.04)", border:`2px solid ${profile.color}33`, borderRadius:20, padding:24, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12 }}>
+                <span style={{ fontSize:36 }}>{profile.avatar}</span>
+                <div style={{ flex:1 }}>
+                  <h3 style={{ margin:0, color:profile.color, fontWeight:900, fontSize:20 }}>{profile.name}</h3>
+                  <div style={{ display:"flex", gap:10, fontSize:13, color:"#888", marginTop:2, flexWrap:"wrap" }}>
+                    <span>{pts} pts this week</span>
+                    <span>🏅 {totalLifetime} all-time</span>
+                    {profile.wheelPrize&&<span>🏆 {profile.wheelPrize}</span>}
+                  </div>
+                </div>
+                <button onClick={()=>{setAdjustKid(kidId);setShowAdjust(true);}} style={{ background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:10, padding:"8px 14px", color:"#fff", cursor:"pointer", fontSize:13, fontWeight:700 }}>± Pts</button>
+              </div>
+              <ProgressBar points={pts} profileColor={profile.color} />
+              {pendingChores.length>0&&(
+                <div style={{ marginTop:16 }}>
+                  <h4 style={{ margin:"0 0 8px", fontSize:14, color:"#FFD700", fontWeight:800 }}>⏳ Pending ({pendingChores.length})</h4>
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {allChores.map(chore=>{const p=log.find(c=>c.choreId===chore.id&&c.done&&!c.verified);if(!p)return null;return <ChoreCard key={chore.id} chore={chore} completions={log} isParent={true} onCheckOff={()=>{}} onVerify={(cid,date,ok)=>verifyChore(kidId,cid,date,ok)} />;})}
+                  </div>
+                </div>
+              )}
+              {pendingChores.length===0&&<p style={{ color:"#555", fontSize:14, marginTop:12, textAlign:"center" }}>No chores pending ✓</p>}
+              <button onClick={()=>{setActiveKid(kidId);setShowAddChore(true);}} style={{ marginTop:12, width:"100%", background:"rgba(255,255,255,0.05)", border:"1px dashed rgba(255,255,255,0.2)", borderRadius:12, padding:"10px", color:"#888", cursor:"pointer", fontSize:14, fontWeight:700 }}>+ Add Rotating Chore</button>
+            </div>
+          );
+        })}
+        {showAddChore&&activeKid&&<AddChoreModal kidName={data.profiles[activeKid]?.name} onAdd={(name,pts)=>{addRotatingChore(activeKid,name,pts);setShowAddChore(false);}} onClose={()=>setShowAddChore(false)} />}
+        {showAdjust&&adjustKid&&<AdjustModal kidName={data.profiles[adjustKid]?.name} onAdjust={(amt,reason)=>{adjustPoints(adjustKid,amt,reason);setShowAdjust(false);}} onClose={()=>setShowAdjust(false)} />}
+      </div>
+    );
+  }
+  return null;
+}
+
+ReactDOM.render(React.createElement(App), document.getElementById("root"));
+</script>
+</body>
+</html>
